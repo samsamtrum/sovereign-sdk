@@ -30,6 +30,7 @@ export type SolanaOffchainUnsignedTransaction<RuntimeCall> = Omit<
   "address_override"
 > & {
   chain_name: string;
+  version: 0;
   /**
    * Signer-declared address override.
    * See `AuthorizationData::address_override` (Rust) for routing semantics.
@@ -40,14 +41,13 @@ export type SolanaOffchainUnsignedTransaction<RuntimeCall> = Omit<
 export type SolanaOffchainUnsignedTransactionV1<
   RuntimeCall,
   MultisigId = unknown,
-> = Omit<SolanaOffchainUnsignedTransaction<RuntimeCall>, "address_override"> & {
+> = Omit<SolanaOffchainUnsignedTransaction<RuntimeCall>, "version"> & {
   multisig_id: MultisigId;
   /**
    * Signer-declared address override.
    * See `AuthorizationData::address_override` (Rust) for routing semantics.
    */
-  address_override?: string;
-  version: number;
+  version: 1;
 };
 
 export type SolanaOffchainSimpleMessage = {
@@ -326,6 +326,7 @@ export class SolanaSignableRollup<RuntimeCall> {
         unsignedTx.address_override !== undefined && {
           address_override: unsignedTx.address_override,
         }),
+      version: 0,
     };
 
     // JSON serialize the Solana unsigned transaction
