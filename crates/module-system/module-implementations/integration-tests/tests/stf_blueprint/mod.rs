@@ -19,7 +19,7 @@ use sov_test_utils::runtime::{config_gas_token_id, Payable, TestRunner};
 
 type S = sov_test_utils::TestSpec;
 
-use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransactionV0, Version0};
+use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction, Version0};
 use sov_modules_api::{PrivateKey, RawTx};
 use sov_test_utils::{EncodeCall, TestUser, TEST_DEFAULT_MAX_FEE};
 use sov_value_setter::ValueSetter;
@@ -236,7 +236,7 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
     chain_id: u64,
     message: RT::Decodable,
 ) -> Transaction<RT, S> {
-    let utx = UnsignedTransactionV0::<RT, S>::new(
+    let utx = UnsignedTransaction::<RT, S>::new(
         message,
         chain_id,
         max_priority_fee_bips,
@@ -278,7 +278,7 @@ pub fn create_tx_bad_sender<RT: Runtime<S>>(
     message: RT::Decodable,
     chain_hash: &[u8; 32],
 ) -> Transaction<RT, S> {
-    let utx = UnsignedTransactionV0::new(
+    let utx = UnsignedTransaction::new(
         message,
         chain_id,
         max_priority_fee_bips,
@@ -299,7 +299,7 @@ pub fn create_tx_valid<RT: Runtime<S>>(
     chain_id: u64,
     message: RT::Decodable,
 ) -> Transaction<RT, S> {
-    let utx = UnsignedTransactionV0::new(
+    let utx = UnsignedTransaction::new(
         message,
         chain_id,
         max_priority_fee_bips,
@@ -320,7 +320,7 @@ pub fn create_tx_out_of_gas<RT: Runtime<S>>(
     chain_id: u64,
     message: RT::Decodable,
 ) -> Transaction<RT, S> {
-    let utx = UnsignedTransactionV0::new(
+    let utx = UnsignedTransaction::new(
         message,
         chain_id,
         max_priority_fee_bips,
