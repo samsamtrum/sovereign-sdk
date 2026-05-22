@@ -203,10 +203,14 @@ impl NodeDiscovery {
                         tracker.submit(ClusterUpdateFailureMetric { stage });
                     });
                     tokio::time::sleep(Duration::from_millis(1000)).await;
+                    // The update failed, so our view of the cluster may be
+                    // stale. Retry directly rather than waiting for a
+                    // notification that may never arrive.
+                    continue;
                 }
 
-                // Wait for at least one notification.
-                self.listener.recv().await?;
+                // Update succeeded; block until the next change is signalled.
+                self.recv_notification().await;
 
                 // Drain any additional pending notifications.
                 while self.listener.next_buffered().is_some() {}
@@ -214,6 +218,29 @@ impl NodeDiscovery {
         });
 
         NodeDiscoveryTask { receiver, handle }
+    }
+
+    /// Waits once for the next cluster change signal before returning to the
+    /// caller's loop, which always re-polls cluster info.
+    ///
+    /// Returns as soon as a notification arrives or [`POLL_INTERVAL`] elapses,
+    /// whichever comes first. The periodic wake-up bounds staleness: it re-polls
+    /// cluster info even if a notification was lost.
+    async fn recv_notification(&mut self) {
+        /// Upper bound on how long to wait before re-polling cluster info.
+        const POLL_INTERVAL: Duration = Duration::from_secs(3);
+
+        match tokio::time::timeout(POLL_INTERVAL, self.listener.recv()).await {
+            // Timed out, or a notification arrived — either way, re-poll.
+            Err(_) | Ok(Ok(_)) => {}
+            Ok(Err(error)) => {
+                tracing::warn!(?error, "Failed to receive cluster notification, retrying");
+                sov_metrics::track_metrics(|tracker| {
+                    tracker.submit(ClusterUpdateFailureMetric { stage: "recv" });
+                });
+                tokio::time::sleep(Duration::from_millis(1000)).await;
+            }
+        }
     }
 
     async fn handle_cluster_update(&mut self) -> Result<(), HandleClusterUpdateError> {
