@@ -88,9 +88,15 @@ impl HandleClusterUpdateError {
     }
 }
 
+/// Default upper bound on how long to wait before re-polling cluster info.
+pub(crate) const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(3);
+
 /// Client for querying cluster information from the database.
 pub struct NodeDiscovery {
     max_age: Duration,
+    /// Upper bound on how long to wait for a notification before re-polling
+    /// cluster info anyway. Bounds how stale the cluster view can get.
+    poll_interval: Duration,
     pool: PgPool,
     listener: PgListener,
     prev_followers: BTreeSet<String>,
@@ -106,10 +112,14 @@ impl NodeDiscovery {
     /// The `max_age` parameter controls how long a node can go without updating
     /// its heartbeat before being filtered out of the cluster info.
     ///
+    /// The `poll_interval` parameter bounds how long the discovery loop waits
+    /// for a change notification before re-polling cluster info anyway.
+    ///
     /// Returns a [`NodeDiscovery`] ready to subscribe for cluster updates.
     pub async fn connect(
         connection_string: &str,
         max_age: Duration,
+        poll_interval: Duration,
         notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     ) -> Result<Self> {
         tracing::info!("Connecting to database.");
@@ -129,6 +139,7 @@ impl NodeDiscovery {
 
         Ok(Self {
             max_age,
+            poll_interval,
             pool,
             listener,
             prev_followers: BTreeSet::new(),
@@ -210,7 +221,7 @@ impl NodeDiscovery {
                 }
 
                 // Update succeeded; block until the next change is signalled.
-                self.recv_notification().await;
+                self.recv_notification(self.poll_interval).await;
 
                 // Drain any additional pending notifications.
                 while self.listener.next_buffered().is_some() {}
@@ -222,15 +233,8 @@ impl NodeDiscovery {
 
     /// Waits once for the next cluster change signal before returning to the
     /// caller's loop, which always re-polls cluster info.
-    ///
-    /// Returns as soon as a notification arrives or [`POLL_INTERVAL`] elapses,
-    /// whichever comes first. The periodic wake-up bounds staleness: it re-polls
-    /// cluster info even if a notification was lost.
-    async fn recv_notification(&mut self) {
-        /// Upper bound on how long to wait before re-polling cluster info.
-        const POLL_INTERVAL: Duration = Duration::from_secs(3);
-
-        match tokio::time::timeout(POLL_INTERVAL, self.listener.recv()).await {
+    async fn recv_notification(&mut self, poll_interval: Duration) {
+        match tokio::time::timeout(poll_interval, self.listener.recv()).await {
             // Timed out, or a notification arrived — either way, re-poll.
             Err(_) | Ok(Ok(_)) => {}
             Ok(Err(error)) => {
